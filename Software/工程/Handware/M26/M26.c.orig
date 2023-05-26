@@ -1,0 +1,157 @@
+#include "M26.h"
+#include "usart.h"
+#include "stdlib.h"
+#include "string.h"
+#include "wdg.h"
+#include "delay.h"
+#include "oled.h"
+
+//#define ProductKey     "hzod7ZDsBhm"             //产品KEY
+//#define DeviceName          "air_01"      //
+//#define DeviceSecret    "4ca493d600d26aa01299097dab536b92"  //
+//#define PubTopic         "/sys/hzod7ZDsBhm/air_01/thing/event/property/post"//发布主题
+//#define SubTopic       	 "/sys/hzod7ZDsBhm/air_01/thing/service/property/set"
+
+#define ProductKey     "a14Uk3lGTjE"             //产品KEY
+#define DeviceName          "air_01"      //
+#define DeviceSecret    "c59bfec1a12104637a77cd96216f8807"  //
+#define PubTopic         "/sys/a14Uk3lGTjE/air_01/thing/event/property/post"//发布主题
+#define SubTopic       	 "/sys/a14Uk3lGTjE/air_01/thing/service/property/set"
+  
+
+char *strx=0,*extstrx,*Readystrx,*Errstrx; 	//返回值指针判断
+char Timestr[100];//时间字符串
+extern char  RxBuffer[100],RxCounter;
+u16 dltime = 500;//延时时间
+
+//void Uart1_SendStr(char*SendBuf)//串口1打印数据
+//{
+//	while(*SendBuf)
+//	{
+//	  while((USART1->SR&0X40)==0);//等待发送完成
+//    USART1->DR = (u8) *SendBuf;
+//		SendBuf++;
+//	}
+//}
+void Clear_Buffer(void)//清空缓存
+{
+    u8 i;
+    Uart1_SendStr(RxBuffer);//串口1监控数据
+    for(i=0; i<RxCounter; i++)
+        RxBuffer[i]=0;//缓存
+    RxCounter=0;
+//    IWDG_Feed();//喂狗
+}
+
+void  AT_Init(void)
+{
+	  Clear_Buffer();
+    printf("AT\r\n");
+    delay_ms(dltime);
+		printf("AT\r\n");
+		delay_ms(dltime);
+    strx=strstr((const char*)RxBuffer,(const char*)"OK");//返回OK
+    while(strx==NULL)
+    {
+        Clear_Buffer();
+        printf("AT\r\n");
+        delay_ms(dltime);
+        strx=strstr((const char*)RxBuffer,(const char*)"OK");//返回OK
+    }
+//    printf("ATE0\r\n"); //关闭回显
+    delay_ms(dltime);
+    Clear_Buffer();
+    printf("AT+CSQ\r\n"); //检查CSQ
+    delay_ms(dltime);
+    /////////////////////////////////
+    printf("AT+CPIN?\r\n");//检查SIM卡是否在位
+    delay_ms(dltime);
+    strx=strstr((const char*)RxBuffer,(const char*)"+CPIN: READY");//查看是否返回ready
+    while(strx==NULL)
+    {
+        Clear_Buffer();
+        printf("AT+CPIN?\r\n");
+        delay_ms(dltime);
+        strx=strstr((const char*)RxBuffer,(const char*)"+CPIN: READY");//检查SIM卡是否在位，等待卡在位，如果卡识别不到，剩余的工作就没法做了
+    }
+    Clear_Buffer();
+    ///////////////////////////////////
+    printf("AT+QMTCLOSE=0\r\n");//断开MQTT连接
+    delay_ms(dltime);
+}
+
+
+void  MQTT_Init(void)
+{
+//-----------------------------------------------------------------------------------------------------	
+	  Clear_Buffer();
+    //查看是否获取到IP
+	  printf("AT+CGPADDR=1\r\n");
+    delay_ms(dltime);
+    strx=strstr((const char*)RxBuffer,(const char*)"+CGPADDR:");
+    while(strx==NULL)
+    {
+        Clear_Buffer();
+        printf("AT+CGPADDR=1\r\n");
+        delay_ms(dltime);
+        strx=strstr((const char*)RxBuffer,(const char*)"+CGPADDR:");
+    }
+//-----------------------------------------------------------------------------------------------------		
+    Clear_Buffer();	
+    //设置阿里云设备信息
+		printf("AT+QMTCFG=ALIAUTH,0,\"%s\",\"%s\",\"%s\"\r\n",ProductKey,DeviceName,DeviceSecret);
+    delay_ms(dltime);
+    strx=strstr((const char*)RxBuffer,(const char*)"OK");
+    while(strx==NULL)
+    {
+        strx=strstr((const char*)RxBuffer,(const char*)"OK");
+    }
+//-----------------------------------------------------------------------------------------------------			
+    Clear_Buffer();	
+		//连接阿里云服务器端
+//    printf("AT+QMTOPEN=0,\"iot-as-mqtt.cn-shanghai.aliyuncs.com\",1883\r\n");  
+		printf("AT+QMTOPEN=0,\"139.196.135.135\",1883\r\n");  
+    delay_ms(dltime);
+    strx=strstr((const char*)RxBuffer,(const char*)"+QMTOPEN: 0,0");
+    while(strx==NULL)
+    {
+				delay_ms(500);
+        strx=strstr((const char*)RxBuffer,(const char*)"+QMTOPEN: 0,0");
+    }
+//-----------------------------------------------------------------------------------------------------		
+    Clear_Buffer();
+		//对接阿里云物联网平台创建的设备
+    printf("AT+QMTCONN=0,\"air_01\"\r\n");
+    delay_ms(dltime);
+    strx=strstr((const char*)RxBuffer,(const char*)"+QMTCONN: 0,0,0");//看下返回状态
+    while(strx==NULL)
+    {
+        strx=strstr((const char*)RxBuffer,(const char*)"+QMTCONN: 0,0,0");//看下返回状态
+    }
+//-----------------------------------------------------------------------------------------------------			
+    Clear_Buffer();
+		//订阅个主题
+		printf("AT+QMTSUB=0,1,\"%s\",0\r\n",SubTopic);
+    delay_ms(dltime);
+    strx=strstr((const char*)RxBuffer,(const char*)"+QMTSUB: 0,1,0");//订阅成功
+    while(strx==NULL)
+    {
+        strx=strstr((const char*)RxBuffer,(const char*)"+QMTSUB: 0,1,0");//订阅成功
+    }
+    Clear_Buffer();
+}
+
+void SendMessage(u8 tt,u8 hh,float pp,u8 alarm)
+{	
+//	printf("AT+QMTPUB=0,1,1,0,\"%s\",\"{\"sys\":{\"ack\":0},\"params\":{mtemp:%d,mhumi:%d,mppm:%0.2f},\"method\":\"thing.event.property.post\"}\"\r\n",PubTopic,tt,hh,pp);//发布消息
+	printf("AT+QMTPUB=0,1,1,0,\"%s\",\"{\"sys\":{\"ack\":0},\"params\":{mtemp:%d,mhumi:%d,mppm:%0.2f,alarm:%d}}\"\r\n",PubTopic,tt,hh,pp,alarm);//发布消息
+	delay_ms(3000);
+//	strx=strstr((const char*)RxBuffer,(const char*)"+QMTPUB: 0,1,0");//发布成功
+//	while(strx==NULL)
+//	{
+////        delay_ms(dltime);
+//			strx=strstr((const char*)RxBuffer,(const char*)"+QMTPUB: 0,1,0");//发布成功
+//	}
+	Clear_Buffer();
+}
+

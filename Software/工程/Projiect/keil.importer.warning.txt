@@ -1,0 +1,12 @@
+!!! 警告 !!!
+
+存在未解决的依赖项，请手动添加它们 !, 完成添加后，请删除该文件，避免再次弹出提示。
+
+项目位置：'d:\毕设\工程\AIRTEST(Aliyun)\Projiect\Projiect.code-workspace'
+
+---
+
+FileName: 'src\jansson_config.c'
+	Class:     'Data Exchange'
+	Category:  'source'
+	Location:  'RTE/Data_Exchange/jansson_config.c'
